@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Acesso por Libras - BA</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
+    canvas { position: absolute; top: 0; left: 0; }
+    #ui {
+      position: absolute; top: 20px; left: 20px; color: white; z-index: 10;
+      background: rgba(0,0,0,0.7); padding: 20px; border-radius: 15px; border: 1px solid #00ffff;
+    }
+    .status { font-size: 24px; color: #00ffff; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <h2>Sistema de Acesso Bio-Libras</h2>
+    <p>Sinalize <span style="color: #ff3030;">"B"</span> (Mão Aberta) e depois <span style="color: #ff3030;">"A"</span> (Mão Fechada)</p>
+    <div id="step" class="status">Aguardando sinal "B"...</div>
+  </div>
+  <video id="webcam" style="display:none;"></video>
+  <canvas id="output_canvas"></canvas>
+
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+
+  <script>
+    const videoElement = document.getElementById('webcam');
+    const canvasElement = document.getElementById('output_canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+    const stepDisplay = document.getElementById('step');
+
+    let sequence = ""; // Para rastrear o "BA"
+
+    function onResults(handResults, faceResults) {
+      canvasElement.width = window.innerWidth;
+      canvasElement.height = window.innerHeight;
+      const w = canvasElement.width; const h = canvasElement.height;
+
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, w, h);
+      canvasCtx.translate(w, 0); canvasCtx.scale(-1, 1);
+      
+      // Desenha Face Mesh
+      if (faceResults.multiFaceLandmarks) {
+        for (const landmarks of faceResults.multiFaceLandmarks) {
+          drawConnectors(canvasCtx, landmarks, FACEMESH_TESSELATION, {color: '#C0C0C030'});
+          drawConnectors(canvasCtx, landmarks, FACEMESH_FACE_OVAL, {color: '#00ffff'});
+        }
+      }
+
+      // Lógica da Mão
+      if (handResults.multiHandLandmarks && handResults.multiHandLandmarks.length > 0) {
+        const landmarks = handResults.multiHandLandmarks[0];
+        drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
+
+        // Detector de Gesto Simples
+        const isFist = landmarks[8].y > landmarks[6].y && landmarks[12].y > landmarks[10].y; // Mão fechada (A)
+        const isOpen = landmarks[8].y < landmarks[6].y && landmarks[12].y < landmarks[10].y; // Mão aberta (B)
+
+        if (isOpen && sequence === "") {
+            sequence = "B";
+            stepDisplay.innerText = "Sinal 'B' detectado! Agora faça 'A'...";
+            stepDisplay.style.color = "#ffff00";
+        } else if (isFist && sequence === "B") {
+            stepDisplay.innerText = "ACESSO PERMITIDO!";
+            stepDisplay.style.color = "#00ff00";
+            setTimeout(() => { window.location.href = "jupiter.html"; }, 1000);
+        }
+      }
+      canvasCtx.restore();
+    }
+
+    const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+    hands.setOptions({ maxNumHands: 1, minDetectionConfidence: 0.7 });
+    hands.onResults(results => { latestHandResults = results; });
+
+    const faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
+    faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true });
+    faceMesh.onResults(results => { onResults(latestHandResults, results); });
+
+    let latestHandResults = {};
+    const camera = new Camera(videoElement, {
+      onFrame: async () => {
+        await hands.send({image: videoElement});
+        await faceMesh.send({image: videoElement});
+      }, width: 1280, height: 720
+    });
+    camera.start();
+  </script>
+</body>
+</html>

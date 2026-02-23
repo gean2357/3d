@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Júpiter Generativo</title>
+  <style>
+    body { margin: 0; background: #000; overflow: hidden; }
+    #webcam { position: absolute; bottom: 10px; right: 10px; width: 200px; height: 150px; border: 2px solid #333; transform: scaleX(-1); z-index: 10; }
+  </style>
+</head>
+<body>
+  <video id="webcam" autoplay playsinline></video>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+  <script>
+    // Configuração Three.js (O Planeta de Pontos)
+    const scene = new THREE.Scene();
+    const cameraView = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const particlesGeometry = new THREE.BufferGeometry();
+    const count = 8000;
+    const positions = new Float32Array(count * 3);
+    const originalPositions = new Float32Array(count * 3);
+
+    for(let i = 0; i < count * 3; i+=3) {
+        let phi = Math.acos(-1 + (2 * i/3) / count);
+        let theta = Math.sqrt(count * Math.PI) * phi;
+        positions[i] = 2 * Math.cos(theta) * Math.sin(phi);
+        positions[i+1] = 2 * Math.sin(theta) * Math.sin(phi);
+        positions[i+2] = 2 * Math.cos(phi);
+        originalPositions[i] = positions[i];
+        originalPositions[i+1] = positions[i+1];
+        originalPositions[i+2] = positions[i+2];
+    }
+    particlesGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const material = new THREE.PointsMaterial({ size: 0.015, color: 0xffaa44 });
+    const points = new THREE.Points(particlesGeometry, material);
+    scene.add(points);
+    cameraView.position.z = 5;
+
+    // Lógica Mediapipe
+    const videoElement = document.getElementById('webcam');
+    let explosionFactor = 0;
+
+    function onResults(results) {
+      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        const hand = results.multiHandLandmarks[0];
+        // Distância entre polegar e indicador para medir "abertura"
+        const dist = Math.sqrt(Math.pow(hand[8].x - hand[4].x, 2) + Math.pow(hand[8].y - hand[4].y, 2));
+        explosionFactor = dist > 0.1 ? (dist * 10) : 0; // Se abrir a mão, explode
+      } else {
+        explosionFactor = 0;
+      }
+    }
+
+    const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+    hands.setOptions({ maxNumHands: 1, minDetectionConfidence: 0.5 });
+    hands.onResults(onResults);
+
+    const camera = new Camera(videoElement, {
+      onFrame: async () => { await hands.send({image: videoElement}); },
+      width: 640, height: 480
+    });
+    camera.start();
+
+    // Animação
+    function animate() {
+      requestAnimationFrame(animate);
+      const positions = particlesGeometry.attributes.position.array;
+      
+      for(let i = 0; i < count * 3; i+=3) {
+        const ox = originalPositions[i];
+        const oy = originalPositions[i+1];
+        const oz = originalPositions[i+2];
+        
+        // Se explosionFactor for alto, os pontos se afastam do centro
+        positions[i] += (ox * (1 + explosionFactor) - positions[i]) * 0.1;
+        positions[i+1] += (oy * (1 + explosionFactor) - positions[i+1]) * 0.1;
+        positions[i+2] += (oz * (1 + explosionFactor) - positions[i+2]) * 0.1;
+      }
+      
+      particlesGeometry.attributes.position.needsUpdate = true;
+      points.rotation.y += 0.002;
+      renderer.render(scene, cameraView);
+    }
+    animate();
+  </script>
+</body>
+</html>
