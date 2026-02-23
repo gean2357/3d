@@ -1,24 +1,27 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Acesso por Libras - BA</title>
+  <title>Acesso Bio-Libras - Dennis Pro</title>
   <style>
-    body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
-    canvas { position: absolute; top: 0; left: 0; }
+    body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; }
     #ui {
-      position: absolute; top: 20px; left: 20px; color: white; z-index: 10;
-      background: rgba(0,0,0,0.7); padding: 20px; border-radius: 15px; border: 1px solid #00ffff;
+      position: absolute; top: 30px; left: 30px; color: white; z-index: 10;
+      background: rgba(0, 20, 40, 0.85); padding: 25px; border-radius: 20px; 
+      border: 2px solid #00ffff; box-shadow: 0 0 20px rgba(0,255,255,0.3);
     }
-    .status { font-size: 24px; color: #00ffff; font-weight: bold; }
+    .status { font-size: 28px; color: #00ffff; font-weight: bold; text-shadow: 0 0 10px #00ffff; margin-top: 10px; }
+    .hint { color: #aaa; font-size: 14px; }
   </style>
 </head>
 <body>
   <div id="ui">
-    <h2>Sistema de Acesso Bio-Libras</h2>
-    <p>Sinalize <span style="color: #ff3030;">"B"</span> (Mão Aberta) e depois <span style="color: #ff3030;">"A"</span> (Mão Fechada)</p>
-    <div id="step" class="status">Aguardando sinal "B"...</div>
+    <div style="letter-spacing: 2px; font-weight: 100;">SISTEMA BIOMÉTRICO</div>
+    <div id="step" class="status">INICIALIZANDO...</div>
+    <p class="hint">Sinalize "B" (Palma) e depois "A" (Punho)</p>
   </div>
-  <video id="webcam" style="display:none;"></video>
+  
+  <video id="webcam" autoplay playsinline style="display:none;"></video>
   <canvas id="output_canvas"></canvas>
 
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
@@ -32,63 +35,85 @@
     const canvasCtx = canvasElement.getContext('2d');
     const stepDisplay = document.getElementById('step');
 
-    let sequence = ""; // Para rastrear o "BA"
+    let sequence = ""; 
+    let lastResultsHand = null;
 
     function onResults(handResults, faceResults) {
+      // Ajusta o tamanho do canvas para a janela
       canvasElement.width = window.innerWidth;
       canvasElement.height = window.innerHeight;
-      const w = canvasElement.width; const h = canvasElement.height;
+      const w = canvasElement.width;
+      const h = canvasElement.height;
 
       canvasCtx.save();
       canvasCtx.clearRect(0, 0, w, h);
-      canvasCtx.translate(w, 0); canvasCtx.scale(-1, 1);
       
-      // Desenha Face Mesh
+      // Espelhar a imagem para parecer um espelho
+      canvasCtx.translate(w, 0);
+      canvasCtx.scale(-1, 1);
+      
+      // Desenha o vídeo de fundo (opcional, mas ajuda a ver o que está fazendo)
+      canvasCtx.globalAlpha = 0.6;
+      canvasCtx.drawImage(handResults.image || faceResults.image, 0, 0, w, h);
+      canvasCtx.globalAlpha = 1.0;
+
+      // --- DESENHO DA FACE ---
       if (faceResults.multiFaceLandmarks) {
         for (const landmarks of faceResults.multiFaceLandmarks) {
-          drawConnectors(canvasCtx, landmarks, FACEMESH_TESSELATION, {color: '#C0C0C030'});
-          drawConnectors(canvasCtx, landmarks, FACEMESH_FACE_OVAL, {color: '#00ffff'});
+          drawConnectors(canvasCtx, landmarks, FACEMESH_TESSELATION, {color: '#C0C0C030', lineWidth: 1});
+          drawConnectors(canvasCtx, landmarks, FACEMESH_FACE_OVAL, {color: '#00ffff', lineWidth: 2});
         }
       }
 
-      // Lógica da Mão
+      // --- DESENHO E LÓGICA DA MÃO ---
       if (handResults.multiHandLandmarks && handResults.multiHandLandmarks.length > 0) {
-        const landmarks = handResults.multiHandLandmarks[0];
-        drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
+        for (const landmarks of handResults.multiHandLandmarks) {
+          // Linhas Neon nas mãos
+          drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 4});
+          drawLandmarks(canvasCtx, landmarks, {color: '#FF3030', lineWidth: 2, radius: 3});
 
-        // Detector de Gesto Simples
-        const isFist = landmarks[8].y > landmarks[6].y && landmarks[12].y > landmarks[10].y; // Mão fechada (A)
-        const isOpen = landmarks[8].y < landmarks[6].y && landmarks[12].y < landmarks[10].y; // Mão aberta (B)
+          // Lógica de Reconhecimento
+          const isFist = landmarks[8].y > landmarks[6].y && landmarks[12].y > landmarks[10].y; 
+          const isOpen = landmarks[8].y < landmarks[6].y && landmarks[12].y < landmarks[10].y;
 
-        if (isOpen && sequence === "") {
-            sequence = "B";
-            stepDisplay.innerText = "Sinal 'B' detectado! Agora faça 'A'...";
-            stepDisplay.style.color = "#ffff00";
-        } else if (isFist && sequence === "B") {
-            stepDisplay.innerText = "ACESSO PERMITIDO!";
-            stepDisplay.style.color = "#00ff00";
-            setTimeout(() => { window.location.href = "jupiter.html"; }, 1000);
+          if (isOpen && sequence === "") {
+              sequence = "B";
+              stepDisplay.innerText = "SINAL 'B' OK!";
+              stepDisplay.style.color = "#ffff00";
+          } else if (isFist && sequence === "B") {
+              sequence = "BA";
+              stepDisplay.innerText = "ACESSO LIBERADO";
+              stepDisplay.style.color = "#00ff00";
+              setTimeout(() => { window.location.href = "jupiter.html"; }, 800);
+          }
         }
       }
       canvasCtx.restore();
     }
 
+    // Configuração do MediaPipe Hands
     const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-    hands.setOptions({ maxNumHands: 1, minDetectionConfidence: 0.7 });
-    hands.onResults(results => { latestHandResults = results; });
+    hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
+    hands.onResults(results => { lastResultsHand = results; });
 
+    // Configuração do MediaPipe Face
     const faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
-    faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true });
-    faceMesh.onResults(results => { onResults(latestHandResults, results); });
+    faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5 });
+    faceMesh.onResults(faceRes => {
+        if (lastResultsHand) onResults(lastResultsHand, faceRes);
+    });
 
-    let latestHandResults = {};
     const camera = new Camera(videoElement, {
       onFrame: async () => {
         await hands.send({image: videoElement});
         await faceMesh.send({image: videoElement});
-      }, width: 1280, height: 720
+      },
+      width: 1280, height: 720
     });
     camera.start();
+
+    // Texto inicial
+    stepDisplay.innerText = "AGUARDANDO GESTO...";
   </script>
 </body>
 </html>
